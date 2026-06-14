@@ -9,3 +9,8 @@ logs/
 *.log
 .idea/
 .vscode/
+
+# Local working artefacts — heavy or contract-sensitive content stays off git.
+downloads/
+data/extractions_cache.jsonl
+data/extract_run.log

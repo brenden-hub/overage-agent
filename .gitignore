@@ -9,6 +9,7 @@ logs/
 *.log
 .idea/
 .vscode/
+.claude/
 
 # Local working artefacts — heavy or contract-sensitive content stays off git.
 downloads/

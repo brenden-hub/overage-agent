@@ -119,12 +119,23 @@ def signed_download_url(file_id: str) -> str | None:
 
 
 def download(file_id: str, dest_path: str) -> bool:
-    url = signed_download_url(file_id)
-    if not url:
-        return False
-    r = requests.get(url, timeout=60)
-    if r.status_code != 200:
-        return False
+    """Download via /files/v3/files/{id}/download — it streams the bytes through
+    the authenticated API. The /signed-url endpoint returns CDN URLs that 404 for
+    HIDDEN_PRIVATE files attached to notes, so this is the only reliable path."""
+    r = requests.get(
+        f"https://api.hubapi.com/files/v3/files/{file_id}/download",
+        headers=_h(),
+        timeout=60,
+        allow_redirects=True,
+    )
+    if r.status_code != 200 or not r.content.startswith(b"%PDF"):
+        # Fall back to the signed-url path (works for files in the public CDN).
+        url = signed_download_url(file_id)
+        if not url:
+            return False
+        r = requests.get(url, timeout=60, allow_redirects=True)
+        if r.status_code != 200 or not r.content.startswith(b"%PDF"):
+            return False
     with open(dest_path, "wb") as f:
         f.write(r.content)
     return True

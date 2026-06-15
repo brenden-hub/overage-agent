@@ -15,3 +15,6 @@ logs/
 downloads/
 data/extractions_cache.jsonl
 data/extract_run.log
+data/build_extractions_cache.jsonl
+data/build_extract_run.log
+overage-agent/

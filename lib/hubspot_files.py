@@ -142,62 +142,72 @@ def download(file_id: str, dest_path: str) -> bool:
 
 
 def iter_msa_candidates_for_company(company_id: str) -> Iterator[dict]:
-    """Yield {file_id, name, ext, size, deal_id, deal_name} for every PDF on every
-    closed-won deal's notes (plus company notes) whose filename looks like an MSA
-    or Order Form."""
+    """Yield {file_id, name, ext, size, deal_id, deal_name, note_ts} for every PDF
+    on every closed-won deal's notes (plus company notes) whose filename looks
+    like an MSA / Order Form / Renewal / etc.
+
+    Yields newest-first by note timestamp so callers can take the freshest
+    contract as the source of truth — renewals supersede original MSAs."""
     deal_ids = deals_for_company(company_id)
     cw_deals = closed_won_deals(deal_ids)
 
     candidates: list[tuple[str, dict | None]] = []
-    # company-level notes
     for nid in notes_for_company(company_id):
         candidates.append((nid, None))
-    # deal-level notes
     for d in cw_deals:
         for nid in notes_for_deal(d["id"]):
             candidates.append((nid, d))
 
     note_to_deal: dict[str, dict | None] = {n: d for n, d in candidates}
-    seen_files: set[str] = set()
     note_ids = list(note_to_deal.keys())
     if not note_ids:
         return
 
-    body = {
-        "inputs": [{"id": str(n)} for n in note_ids],
-        "properties": ["hs_attachment_ids"],
-    }
-    r = _post("/crm/v3/objects/notes/batch/read", body)
+    r = _post(
+        "/crm/v3/objects/notes/batch/read",
+        {
+            "inputs": [{"id": str(n)} for n in note_ids],
+            "properties": ["hs_attachment_ids", "hs_timestamp"],
+        },
+    )
     if r.status_code != 200:
         return
 
+    seen: set[str] = set()
+    rows: list[dict] = []
     for n in r.json().get("results", []):
         nid = n.get("id")
-        raw = (n.get("properties") or {}).get("hs_attachment_ids") or ""
+        props = n.get("properties") or {}
+        ts = props.get("hs_timestamp") or ""
+        raw = props.get("hs_attachment_ids") or ""
         deal = note_to_deal.get(nid)
         for fid in raw.split(";"):
             fid = fid.strip()
-            if not fid or fid in seen_files:
+            if not fid or fid in seen:
                 continue
-            seen_files.add(fid)
+            seen.add(fid)
             meta = file_metadata(fid)
             if not meta:
                 continue
             ext = (meta.get("extension") or "").lower()
             name = meta.get("name") or ""
-            if ext != "pdf":
+            if ext != "pdf" or not _looks_like_msa(name):
                 continue
-            if not _looks_like_msa(name):
-                continue
-            yield {
-                "file_id": fid,
-                "name": name,
-                "ext": ext,
-                "size": meta.get("size"),
-                "deal_id": deal["id"] if deal else None,
-                "deal_name": (deal["properties"] or {}).get("dealname") if deal else None,
-                "deal_closedate": (deal["properties"] or {}).get("closedate") if deal else None,
-            }
+            rows.append(
+                {
+                    "file_id": fid,
+                    "name": name,
+                    "ext": ext,
+                    "size": meta.get("size"),
+                    "note_ts": ts,
+                    "deal_id": deal["id"] if deal else None,
+                    "deal_name": (deal["properties"] or {}).get("dealname") if deal else None,
+                    "deal_closedate": (deal["properties"] or {}).get("closedate") if deal else None,
+                }
+            )
+
+    rows.sort(key=lambda r: (r["note_ts"], r.get("deal_closedate") or ""), reverse=True)
+    yield from rows
 
 
 _MSA_KEYWORDS = (
@@ -211,6 +221,17 @@ _MSA_KEYWORDS = (
     "contract",
     "service_agreement",
     "service agreement",
+    # Renewals + expansions almost always carry the current limits; the original
+    # MSA can be years stale. Real example: Wealthsimple's 2026 renewal said 3M
+    # MAUs while the 2025 MSA said 1M.
+    "renewal",
+    "expansion",
+    "proposal",
+    "amendment",
+    "addendum",
+    "sow",
+    "subscription",
+    "executed",
 )
 
 

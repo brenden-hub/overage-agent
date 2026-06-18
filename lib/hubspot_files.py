@@ -143,18 +143,33 @@ def download(file_id: str, dest_path: str) -> bool:
 
 def iter_msa_candidates_for_company(company_id: str) -> Iterator[dict]:
     """Yield {file_id, name, ext, size, deal_id, deal_name, note_ts} for every PDF
-    on every closed-won deal's notes (plus company notes) whose filename looks
+    on any associated deal's notes (plus company notes) whose filename looks
     like an MSA / Order Form / Renewal / etc.
 
     Yields newest-first by note timestamp so callers can take the freshest
-    contract as the source of truth — renewals supersede original MSAs."""
+    contract as the source of truth. We deliberately do NOT filter to
+    closed-won here — the Renewals pipeline uses different stage IDs than
+    Sales, and signed MSAs often appear on a renewal deal before it closes."""
     deal_ids = deals_for_company(company_id)
-    cw_deals = closed_won_deals(deal_ids)
+    # Fetch deal metadata so the yielded row knows the parent deal name/closedate,
+    # but include notes from every stage (Sales + Renewals pipelines).
+    all_deals: list[dict] = []
+    for i in range(0, len(deal_ids), 100):
+        chunk = deal_ids[i : i + 100]
+        r = _post(
+            "/crm/v3/objects/deals/batch/read",
+            {
+                "inputs": [{"id": str(d)} for d in chunk],
+                "properties": ["dealname", "dealstage", "closedate", "amount", "pipeline"],
+            },
+        )
+        if r.status_code == 200:
+            all_deals.extend(r.json().get("results", []))
 
     candidates: list[tuple[str, dict | None]] = []
     for nid in notes_for_company(company_id):
         candidates.append((nid, None))
-    for d in cw_deals:
+    for d in all_deals:
         for nid in notes_for_deal(d["id"]):
             candidates.append((nid, d))
 

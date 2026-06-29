@@ -17,4 +17,9 @@ data/extractions_cache.jsonl
 data/extract_run.log
 data/build_extractions_cache.jsonl
 data/build_extract_run.log
+data/build_credit_audit_cache.jsonl
+data/build_credit_audit_run.log
+data/build_refresh_run.log
+data/refreshed_build_limits.csv
 overage-agent/
+Pipe-model/

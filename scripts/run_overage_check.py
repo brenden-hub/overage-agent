@@ -26,7 +26,7 @@ load_dotenv(ROOT / ".env")
 
 import requests  # noqa: E402
 
-from lib import classifier, hubspot_client, slack_client, stripe_client  # noqa: E402
+from lib import classifier, hubspot_client, owner_map, slack_client, stripe_client  # noqa: E402
 
 
 PROPERTIES = [
@@ -38,6 +38,7 @@ PROPERTIES = [
     "expo_update_count",
     "expo_stripe_customer_id",
     "expo_current_plan_name",
+    "hubspot_owner_id",
 ]
 
 
@@ -132,6 +133,7 @@ def main() -> int:
                 )
                 print(f"  [classifier err] {name}: {e}")
 
+            owner_mention = owner_map.slack_mention_for(p.get("hubspot_owner_id"))
             blocks = slack_client.build_overage_blocks(
                 company_name=name,
                 domain=domain,
@@ -140,6 +142,7 @@ def main() -> int:
                 mau_limit=limit,
                 hubspot_url=hs_url,
                 stripe_url=stripe_url,
+                owner_mention=owner_mention,
             )
             if slack_client.post_overage(blocks, summary=summary):
                 posted += 1

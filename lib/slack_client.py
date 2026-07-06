@@ -45,9 +45,11 @@ def build_overage_blocks(
     mau_limit: int,
     hubspot_url: str,
     stripe_url: str | None,
+    owner_mention: str | None = None,
 ) -> list[dict[str, Any]]:
     """Mirrors the PQA agent's block layout: header → summary section → action
-    buttons → footer context."""
+    buttons → footer context. `owner_mention` should be like `<@U0ABC1234>`;
+    if present, a dedicated section calls out the owner so they get @-pinged."""
     overage = current_mau - mau_limit
     ratio = current_mau / mau_limit if mau_limit else 0
     pct_over = (overage / mau_limit * 100) if mau_limit else 0
@@ -94,10 +96,20 @@ def build_overage_blocks(
         )
     blocks.append({"type": "actions", "elements": action_elements})
 
+    footer_text = "overage-agent · #revenue_overages"
+    if owner_mention:
+        # Put the @-mention in its own section so Slack fires the notification
+        # (mentions inside `context` blocks don't always ping reliably).
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Owner:* {owner_mention}"},
+            }
+        )
     blocks.append(
         {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": "overage-agent · #revenue_overages"}],
+            "elements": [{"type": "mrkdwn", "text": footer_text}],
         }
     )
     return blocks

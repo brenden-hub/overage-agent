@@ -15,14 +15,17 @@ ROOT="/Users/brendensong/.superset/projects/overage-agent"
 cd "$ROOT"
 
 # cron has a minimal PATH; expose the claude CLI (subscription-funded).
-export PATH="$HOME/.superset/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+export PATH="$HOME/.superset/bin:$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
 LOG_DIR="$ROOT/logs"; mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/nightly_refresh_$(date +%Y-%m-%d).log"
 
 {
-    echo "==== $(date -u +%Y-%m-%dT%H:%M:%SZ) nightly MSA refresh ===="
+    echo "==== $(date -u +%Y-%m-%dT%H:%M:%SZ) nightly refresh ===="
     echo "--- MAU limits (recent activity only) ---"
     "$ROOT/.venv/bin/python" "$ROOT/scripts/refresh_with_latest_msa.py" --recent-days 7
+    echo ""
+    echo "--- Build counts (30-day, from BigQuery) ---"
+    "$ROOT/.venv/bin/python" "$ROOT/scripts/sync_build_counts_from_bq.py"
     echo "==== exit $? ===="
 } >> "$LOG" 2>&1

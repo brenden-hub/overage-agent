@@ -12,6 +12,10 @@ LOG="$LOG_DIR/run_$(date +%Y-%m-%d).log"
 
 {
     echo "==== $(date -u +%Y-%m-%dT%H:%M:%SZ) overage-agent cron run ===="
+    echo "--- MAU check ---"
     "$ROOT/.venv/bin/python" "$ROOT/scripts/run_overage_check.py"
+    echo ""
+    echo "--- Build credit check (build_only scope) ---"
+    "$ROOT/.venv/bin/python" "$ROOT/scripts/run_build_overage_check.py"
     echo "==== exit $? ===="
 } >> "$LOG" 2>&1
